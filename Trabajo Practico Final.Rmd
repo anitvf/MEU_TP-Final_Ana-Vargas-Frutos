@@ -1,0 +1,333 @@
+---
+title: "Trabajo Final"
+author: "Ana Vargas Frutos"
+date: "Octubre, 2023"
+output: html_document
+---
+
+# Trabajo Final - Instrumentos de análisis de datos II
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(ggmap)
+library(sf)
+library(ggplot2)
+library(leaflet)
+library(hrbrthemes)
+library(gganimate)
+library(ggExtra)
+library(viridis)
+library(dygraphs)
+```
+ 
+### La nueva normalidad? Afecto de la pandemia la frecuencia de la siniestrialidad vial y su distrubición espacial en París. 
+
+Este estudio analizará la variación en cuanto a cantidad y distribución espacial de los accidentes de tránsito en la ciudad de Paris entre los años 2017 y 2022 de tal manera a explorar las variaciones entre el antes y después de la pandemia de la COVID-19. El alcance de este estudio consiste en un análisis descriptivo por lo que no pretende asignar relación de causalidad entre la pandemia y los eventos posteriores a la misma. 
+
+La pandemia de la COVID 19 supuso la imposición de medidas de restricción en cuanto a la movilidad de las personas y el cese de las actividades económicas y recreativas en casi todas las ciudades del mundo. Estas medidas de aislamiento, cuya duración variaba de acuerdo al país y a las características de las personas,suponían menos viajes por lo que este análisis explora la variación espacial y temporal de los diferentes tipos de accidentes viales registrados en París, antes, durante y luego de la pandemia.  
+
+Para ello se utilizan dos bases de datos: una base de datos de los registros de accidentes viales en la ciudad de Paris entre los años 2017 y 2022; y una base de datos espacial con datos de los distritos de la ciudad. 
+
+Importamos la base de datos de accidentes viales y la exploramos: 
+
+```{r}
+accidentes_Paris <- read.csv2("accidentologie0.csv", sep = ";",  header =TRUE)
+```
+```{r}
+dim(accidentes_Paris)
+```
+```{r}
+summary(accidentes_Paris)
+```
+```{r}
+str(accidentes_Paris)
+```
+ 
+```{r}
+names(accidentes_Paris)
+```
+La base de datos contiene 35760 observaciones y 25 variables, y consiste en el registro de datos de accidentes viales en la ciudad de Paris, en el cual se tienen los datos sobre el tipo de accidente, la fecha, tipo de accidente, tipo de víctima y sus características, las coordenadas y el distrito. 
+ 
+Para explorar la temporalidad de los accidentes, se necesita revisar los datos de correspondiente a la fecha y realizar modificaciones en caso de ser necesario. 
+
+```{r}
+class(accidentes_Paris$Date)
+```
+
+Como la fecha consiste en una variable característica, esta deberá ser transformada de tal manera a permitir la extracción de los datos por año, mes y día. Para ello, modicamos la tipología de la variable y luego creamos nuevas variables que reflejen el año, mes y tipo de día. 
+ 
+```{r}
+accidentes_Paris<- accidentes_Paris %>%
+  mutate(Date=ymd(Date))
+```
+
+Modificamos la base de datos, creando variables de fecha - tales como año, mes y día- y cambiamos algunos de los nombres para mejor aplicación de la base en los próximos pasos: 
+
+```{r}
+accidentes_Paris2 <- accidentes_Paris %>%
+  mutate(month=month(Date, label=TRUE),
+         year=year(Date),
+         type_day=wday(Date, label=TRUE, abbr=FALSE),
+         day=day(Date)) %>% 
+  rename(District = Arrondissement,
+         Type_victmim = Catégorie, 
+         Severity = Gravité,
+         Name_district= Arrondissement.1,
+         Age_range= Tranche.d.age,
+         GeoCoordinates =Coordonnées) %>% 
+  select(-c(BL,BH,Tué, )) %>% 
+  mutate(Longitude=as.numeric(Longitude),
+         Latitude= as.numeric(Latitude)) %>% 
+  filter(Mode!="Autres")
+```
+
+Utilizamos gráficos para conocer mejor el comportamiento de los datos: 
+
+
+```{r}
+ggplot(accidentes_Paris2) + 
+    geom_bar(aes(x = year))+
+  labs(title="Cantidad de accidentes de tráfico por año",
+       subtitle="Paris 2017-2022",
+       x="Año",
+       y="Cantidad")+
+  theme_ipsum()
+```
+
+```{r}
+ggplot(accidentes_Paris2) + 
+    geom_bar(aes(x =year, fill=Mode))+
+  labs(title="Cantidad de accidentes de tráfico por año y por género",
+       subtitle="Paris 2017-2022",
+       fill="Tipo",
+       x="Año",
+       y="Cantidad")+
+  facet_wrap(~Genre)+
+  theme_ipsum()
+```
+
+Este grafico clarametne muestra las diferencias en cuanto género, de los accidentes occurridos en cada año y por género. En todos los años registrados se observa una mayor ocurrrencia de accidentes para el género masculino. Esta diferencia está asociada a que el sexo masculino, en promedio, realiza mayor cantidad de viajes y más largos. Así mismo, está asociado a diferentes patrones de comportanmiento cuando utiliza ciertos modos, tales como el vehiculo privado, y es el género que mayor utiliza la bicicleta como medio de transporte. Los gráficos demuestran, también, que los niveles de accidentes de tránsito no han vuelto al mismo nivel en comparación a los números pre pandemia. 
+
+
+```{r}
+ggplot(accidentes_Paris2) + 
+    geom_bar(aes(x = year, fill= Type_victmim))+
+  labs(title="Cantidad de accidentes de tráfico por día de la semana",
+       subtitle="Paris 2017-2022",
+       fill="Tipo de victima",
+       x="Día de la semana",
+       y="Cantidad")+
+  facet_wrap(~type_day)+
+  theme_minimal()
+```
+
+Esta grafica nos permite observar que las víctimas más frecuentes de los accidentes son los conductores. 
+
+```{r}
+ggplot(accidentes_Paris2) + 
+    geom_bar(aes(x = month, fill= Mode))+
+  labs(title="Cantidad de accidentes de tráfico por mes",
+       subtitle="Paris 2017-2022",
+       fill="Tipo",
+       x="Mes del año",
+       y="Cantidad")+
+  theme_minimal()
+```
+
+En la distribución de los accidentes por mes del año, se observa que los meses de junio y septiembre registran la mayor cantidad de accidentes y el mes de agosto registra la menor cantidad. Esto podría estar relacionado al nivel de actividades realizadas en la ciudad, siendo agosto el mes tipicamente dedicado a las vaciones de verano por lo que se suele observar un gran exodo de las personas a zonas veraniegas. Asi mismo, junio y septiempbre coinciden con periodos de cierre y reinicio de acitividades, donde la reactivación propia de las actividades económicas están asociadas con mayores viajes urbanos. 
+
+
+```{r}
+ggplot(accidentes_Paris2) + 
+    geom_bar(aes(x = year, fill=Genre))+
+  labs(title="Cantidad de accidentes de tráfico por año",
+       subtitle="Accidentes por tipo",
+       fill="Género",
+       x="Año",
+       y="Cantidad")+
+   facet_wrap(~Mode)+
+  theme_ipsum()
+```
+
+La distribución anual de los accidentes por tipo de movilidad/vehículo, nos muestra que la mayor cantidad de accidentes suceden entre vehículos de dos ruedas y la menor cantidad en vehículos motorizados individuales. 
+
+```{r}
+ggplot(accidentes_Paris2  %>%
+         filter(year(Date)==2020) %>% 
+         group_by(Date, Mode) %>%
+         summarise(Cantidad=n())) + 
+    geom_line(aes(x = Date, y = Cantidad, color=Mode, group=Mode))+
+    geom_vline(aes(xintercept=ymd("2020-03-17")), color="red", linewidth=1)+
+    geom_text(aes(x = ymd("2020-03-20"), y =15, label = "Lockdown", angle=90))+
+  labs(title="EVOLUCIÓN DE ACCIDENTES DE TRANSITO",
+       subtitle="Paris. 2020",
+       caption="Elaboración propia en base a datos de OpenData Paris",
+       color="TIPO",
+       x="",
+       y="")+
+  scale_color_viridis_d(direction=-1)+
+  scale_x_date(date_breaks = "2 month")+
+  theme_minimal()+
+  theme(legend.position="top",
+        legend.justification = "left",
+        title=element_text(size=10, face = "bold"),
+        legend.title=element_text(size=10, face = "bold"),
+        axis.text.x = element_text(size = 6, angle = 90))
+```
+
+Si observamos el comportamiento de los datos, podemos observar que la introducción de los medidas de aislamiento está asociada a un fuerte caída puntual de los niveles de accidentalidad. Cabe mencionar que el régimen de aislamiento en Francia tomó lugar el 17 de marzo de 2020.
+
+Para analizar la distribución espacial de los accidentes, nos apoyamos en la base de datos de los distritos: 
+
+```{r}
+distritos_Paris <- st_read("arrondissements/arrondissements.shp",
+                        stringsAsFactors = TRUE)
+```
+Continuamos explorando la base de datos de Distritos:
+
+```{r}
+summary(distritos_Paris)
+```
+
+```{r}
+dim(distritos_Paris)
+```
+
+Esta base de datos cuenta con 20 observaciones correspondiente a los 20 distritos de la ciudad de París; conteniendo los datos geográficos, la superficie, el perímetro y los códigos de los distritos. 
+
+Exploramos la relación entre ambas bases de datos: 
+
+```{r}
+ggplot()+
+  geom_sf(data=distritos_Paris, color="blue", alpha=0.6)+
+  geom_point(data=accidentes_Paris2, aes(x=Longitude, y=Latitude, colour= Name_district), size=0.5, alpha=0.4, show.legend = FALSE )
+  
+```
+
+Podemos observar que algunas observaciones quedan fuera del mapa de distritos, por lo que convertimos la base de datos de accidentes en una base de datos geográficas y esta última, intersectamos con la capa de distritos. 
+
+```{r}
+accidentes_Paris2_geo<- accidentes_Paris2 %>% 
+    st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)
+```
+
+
+```{r}
+accidentes_Paris2_geo2 <- accidentes_Paris2_geo %>% 
+  st_filter(distritos_Paris) %>% 
+  st_join(distritos_Paris) %>% 
+  st_drop_geometry() %>% 
+  mutate(GeoCoordinates = strsplit(GeoCoordinates, ", ")) %>%   # Split the coordinates
+  mutate(longitude = as.numeric(sapply(GeoCoordinates, `[`, 2)), # Extract longitud
+         latitude = as.numeric(sapply(GeoCoordinates, `[`, 1)))  # Extract latitude
+```
+
+Analizamos la distribución espacial de los accidentes de tránsito:
+
+```{r}
+ggplot()+
+  geom_sf(data=distritos_Paris, color="blue", alpha=0.6)+
+    geom_bin2d(data = accidentes_Paris2_geo2, 
+               aes(x = longitude, y = latitude), bins=50)+
+  scale_fill_distiller(palette ="PuOr" )+
+  labs(title="Distribución espacial de accidentes en Paris",
+       subtitle="Accidentes viales en Paris, 2017-2022",
+       x="Longitud",
+       y="Latitud",
+       fill="Cantidad",
+       caption="Fuente: Elaboración propia de los datos de Open Data Paris")
+```
+
+```{r}
+ggplot()+
+  geom_sf(data=distritos_Paris, color="red", alpha=0.6 )+
+    stat_density2d(data = accidentes_Paris2_geo2, 
+               aes(x = longitude, y = latitude, fill = after_stat(level)), geom = "polygon", alpha=0.75)+
+  scale_fill_distiller(palette = "PuBu")+
+  labs(title="Distribución espacial de accidentes por año",
+       subtitle="Accidentes viales en Paris, 2017-2022",
+       x="",
+       y="",
+       fill="Cantidad",
+       caption="Fuente: Elaboración propia de los datos de Open Data Paris")
+```
+
+Los mapas anteriores muestran una clara concentración de los accidentes, acumulados en los diferentes años, en aquellos distritos proximos al centro de la ciudad. 
+
+```{r}
+ggplot()+
+  geom_sf(data=distritos_Paris, color="blue", alpha=0.6)+
+    geom_bin2d(data = accidentes_Paris2_geo2, 
+               aes(x = longitude, y = latitude), )+
+  scale_fill_viridis_c(direction=-1)+
+  labs(title="Distribución espacial de accidentes por año",
+       subtitle="Accidentes viales en Paris, 2017-2022",
+       x="",
+       y="",
+       fill="Cantidad",
+       caption="Fuente: Elaboración propia de los datos de Open Data Paris")+
+  facet_wrap(~year, ncol=2)
+```
+
+```{r}
+ggplot()+
+  geom_sf(data=distritos_Paris, color="blue", alpha=0.6)+
+    stat_density2d(data = accidentes_Paris2_geo2, 
+               aes(x = longitude, y = latitude, fill = after_stat(level)), geom = "polygon", alpha=0.75)+
+  scale_fill_distiller(palette = "GnBu")+
+  labs(title="Distribución espacial de accidentes por año",
+       subtitle="Accidentes viales en Paris, 2017-2022",
+       x="",
+       y="",
+       fill="Cantidad",
+       caption="Fuente: Elaboración propia de los datos de Open Data Paris")+
+  facet_wrap(~year, ncol=2)
+```
+Si observamos esta distribución de los accidentes por año, observamos que aunque se mantienen concentrados en las mismas zonas, la acumulación tiene ciertas variaciones. Estas variaciones pueden estar asociadas a las medidas de pacificación del tránsito y eliminación de la circulación de vehículos privados en ciertas zonas de la ciudad. 
+
+Para mejore comprensión, podemos observar la distribución espacial por tipo de accidente: 
+
+```{r}
+ggplot()+
+  geom_sf(data=distritos_Paris, color="blue", alpha=0.6)+
+    geom_bin2d(data = accidentes_Paris2_geo2, 
+               aes(x = longitude, y = latitude), )+
+  scale_fill_distiller(palette = "BuPuGn")+
+  labs(title="Distribución espacial de accidentes por año",
+       subtitle="Accidentes viales en Paris, 2017-2022",
+       x="",
+       y="",
+       fill="Cantidad", 
+       caption="Fuente: Elaboración propia de los datos de Open Data Paris")+
+  facet_wrap(~Mode)
+```
+
+```{r}
+ggplot()+
+  geom_sf(data=distritos_Paris, color="red", alpha=0.5)+
+    stat_density2d(data = accidentes_Paris2_geo2, 
+               aes(x = longitude, y = latitude, fill = after_stat(level)), geom = "polygon", alpha=0.8)+
+  scale_fill_distiller(palette = "GnBu")+
+  labs(title="Distribución espacial de accidentes por modo",
+       subtitle="Accidentes viales en Paris, 2017-2022",
+       x="",
+       y="",
+       fill="Cantidad",
+       caption="Fuente: Elaboración propia de los datos de Open Data Paris")+
+  facet_wrap(~Mode, ncol=3)
+```
+Los mapas anteriores demuestran una concentración diferente de acuerdo al tipo de accidente. Se observa una clara concentración de accidentes en Bicicleta (Velo) en el centro de la ciudad, donde las medidas de fomento de la movilidad activa están concentradas. Patron similar se observa en accidentes que involucren peatones (Piéton), sin embargo, en este caso se observan ciertas concentraciones hacia el norte más que el sur, zonas donde se encuentran actracciones como la Iglesia del Sagrado Corazón y el barrio Montmartre, donde existen concentración de zonas peatonales. 
+
+De manera similar, los accidentes en vehículos de 4 ruedas (4 Roues) y 2 ruedas motorizadas (2 Roues Motorisées) se concentran en las zonas más alejadas del centro. 
+
+### Conclusión
+
+Las bases de datos analizadas permitieron explorar la distribución espacial y temporal de los accidentes de tránsito en la ciudad de Paris entre los años 2017 y 2022. Las principales conclusiones que se pueden extraer son: 
+
+1) Se observan menos accidentes de tránsito en la ciudad, en etapa post pandemia. Esta variación podría resultar de la implementación de medidas de pacificación y reducción de tránsito en las zonas más céntricas así como un cambio en los patrones de movilidad asociados a la adopción de modalidades de trabajo híbridas y/o virtuales. 
+
+2) Existe una clara diferencia entre la distribución de los accidentes por género, observandose una gran ocurrencia para el sexo masculino. Sin embargo, los accidentes como peatones en mujeres es superior, evidensiando la vulnerabilidad de este género en la movilidad urbana. 
+
+3) La distribución espacial es coherente con los tipos de viajes y modos más utilizados en zonas más céntricas versus zonas más periféricas. 
+
